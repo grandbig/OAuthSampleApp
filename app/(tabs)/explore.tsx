@@ -1,15 +1,50 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Button, StyleSheet } from 'react-native';
 
-import { Collapsible } from '@/components/ui/collapsible';
-import { ExternalLink } from '@/components/external-link';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Fonts } from '@/constants/theme';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 export default function TabTwoScreen() {
+  const exchangeCodeForToken = async (serverAuthCode: string) => {
+    try {
+      console.log(`code: ${serverAuthCode}, client_id: ${process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID!}, client_secret: ${process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_SECRET!}`);
+      const params = new URLSearchParams({
+        code: serverAuthCode,
+        client_id: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID!,
+        client_secret: process.env.EXPO_PUBLIC_GOOGLE_CLIENT_SECRET!,
+        redirect_uri: 'https://www.google.com', // モバイルアプリの場合は空文字列 or WEBのredirect_uri
+        grant_type: 'authorization_code',
+      });
+
+      console.log('トークン交換リクエスト送信中...');
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString(),
+      });
+
+      const tokenData = await tokenResponse.json();
+
+      // エラーチェック
+      if (tokenData.error) {
+        console.error('Google Error:', tokenData.error_description || tokenData.error);
+        return;
+      }
+
+      console.log('✅ トークン取得成功!');
+      console.log('Access Token:', tokenData.access_token);
+      console.log('Refresh Token:', tokenData.refresh_token);
+      console.log('ID Token:', tokenData.id_token);
+      console.log('Expires In:', tokenData.expires_in, '秒');
+
+      return tokenData;
+    } catch (error) {
+      console.error('Token Exchange Error:', error);
+    }
+  };
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#D0D0D0', dark: '#353636' }}
@@ -21,79 +56,31 @@ export default function TabTwoScreen() {
           style={styles.headerImage}
         />
       }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText
-          type="title"
-          style={{
-            fontFamily: Fonts.rounded,
-          }}>
-          Explore
-        </ThemedText>
-      </ThemedView>
-      <ThemedText>This app includes example code to help you get started.</ThemedText>
-      <Collapsible title="File-based routing">
-        <ThemedText>
-          This app has two screens:{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">app/(tabs)/explore.tsx</ThemedText>
-        </ThemedText>
-        <ThemedText>
-          The layout file in <ThemedText type="defaultSemiBold">app/(tabs)/_layout.tsx</ThemedText>{' '}
-          sets up the tab navigator.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/router/introduction">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Android, iOS, and web support">
-        <ThemedText>
-          You can open this project on Android, iOS, and the web. To open the web version, press{' '}
-          <ThemedText type="defaultSemiBold">w</ThemedText> in the terminal running this project.
-        </ThemedText>
-      </Collapsible>
-      <Collapsible title="Images">
-        <ThemedText>
-          For static images, you can use the <ThemedText type="defaultSemiBold">@2x</ThemedText> and{' '}
-          <ThemedText type="defaultSemiBold">@3x</ThemedText> suffixes to provide files for
-          different screen densities
-        </ThemedText>
-        <Image
-          source={require('@/assets/images/react-logo.png')}
-          style={{ width: 100, height: 100, alignSelf: 'center' }}
-        />
-        <ExternalLink href="https://reactnative.dev/docs/images">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Light and dark mode components">
-        <ThemedText>
-          This template has light and dark mode support. The{' '}
-          <ThemedText type="defaultSemiBold">useColorScheme()</ThemedText> hook lets you inspect
-          what the user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-        </ThemedText>
-        <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-          <ThemedText type="link">Learn more</ThemedText>
-        </ExternalLink>
-      </Collapsible>
-      <Collapsible title="Animations">
-        <ThemedText>
-          This template includes an example of an animated component. The{' '}
-          <ThemedText type="defaultSemiBold">components/HelloWave.tsx</ThemedText> component uses
-          the powerful{' '}
-          <ThemedText type="defaultSemiBold" style={{ fontFamily: Fonts.mono }}>
-            react-native-reanimated
-          </ThemedText>{' '}
-          library to create a waving hand animation.
-        </ThemedText>
-        {Platform.select({
-          ios: (
-            <ThemedText>
-              The <ThemedText type="defaultSemiBold">components/ParallaxScrollView.tsx</ThemedText>{' '}
-              component provides a parallax effect for the header image.
-            </ThemedText>
-          ),
-        })}
-      </Collapsible>
+      <Button
+        // disabled={!request}
+        title="Google OAuth認証"
+        onPress={async () => {
+          // promptAsync();
+          try {
+            const userInfo = await GoogleSignin.signIn();
+            console.log('User Info:', userInfo);
+
+            // serverAuthCodeが取得できた場合、トークン交換を実行
+            // @ts-ignore - serverAuthCodeはドキュメントに記載されているが型定義に含まれていない
+            if (userInfo.data?.serverAuthCode) {
+              // @ts-ignore
+              console.log('Server Auth Code:', userInfo.data.serverAuthCode);
+              // @ts-ignore
+              await exchangeCodeForToken(userInfo.data.serverAuthCode);
+            } else {
+              console.log('⚠️ serverAuthCodeが取得できませんでした');
+              console.log('userInfo全体:', JSON.stringify(userInfo, null, 2));
+            }
+          } catch (error) {
+            console.log(error);
+          }
+        }}
+      />
     </ParallaxScrollView>
   );
 }

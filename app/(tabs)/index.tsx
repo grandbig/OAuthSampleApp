@@ -1,13 +1,90 @@
 import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Button, StyleSheet, View } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
 import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { CodeChallengeMethod, makeRedirectUri, useAuthRequest } from "expo-auth-session";
+import { useEffect } from 'react';
+
+const discovery = {
+  authorizationEndpoint: 'https://github.com/login/oauth/authorize',
+  tokenEndpoint: 'https://github.com/login/oauth/access_token',
+  revocationEndpoint: `https://github.com/settings/connections/applications/${process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID!}`,
+};
+
+const redirectUri = makeRedirectUri({
+  scheme: process.env.EXPO_PUBLIC_REDIRECT_URI_SCHEME,
+});
 
 export default function HomeScreen() {
+  const [request, response, promptAsync] = useAuthRequest(
+    {
+      clientId: process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID!,
+      scopes: ['user:email'],
+      redirectUri: redirectUri,
+      responseType: 'code',
+      usePKCE: true,
+      codeChallengeMethod: CodeChallengeMethod.S256,
+    },
+    discovery
+  );
+
+  const exchangeCodeForToken = async (code: string, codeVerifier: string) => {
+    try {
+      const params = new URLSearchParams({
+        client_id: process.env.EXPO_PUBLIC_GITHUB_CLIENT_ID!,
+        client_secret: process.env.EXPO_PUBLIC_GITHUB_CLIENT_SECRET!,
+        code: code,
+        redirect_uri: redirectUri,
+        code_verifier: codeVerifier,
+        codeChallengeMethod: CodeChallengeMethod.S256,
+      });
+
+      const tokenResponse = await fetch(discovery.tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          // 'Content-Type': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString(),//JSON.stringify(bodyParams),
+      });
+
+      const tokenData = await tokenResponse.json();
+      console.log('Token Response:', tokenData);
+
+      // エラーチェック（GitHubはエラー時もJSONを返すことがあるため）
+      if (tokenData.error) {
+        console.log('GitHub Error:', tokenData.error_description);
+        return;
+      }
+
+      if (tokenData.access_token) {
+        console.log(`tokenData: ${tokenData.access_token}`);
+      }
+    } catch (e) {
+      console.error('Token Exchange Error:', e);
+    }
+  };
+
+  useEffect(() => {
+    if (request) {
+      console.log('--------------------------------------------------');
+      console.log('★ 生成された認可URL:');
+      console.log(request.url); // ← これがブラウザで開かれるURLです
+      console.log('--------------------------------------------------');
+    }
+    if (response?.type === 'success') {
+      const { code } = response.params;
+      if (request?.codeVerifier) {
+        exchangeCodeForToken(code, request.codeVerifier);
+      }
+    } else {
+      console.log(`errorCode: ${response?.type}`);
+    }
+  }, [response, request]);
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -17,62 +94,34 @@ export default function HomeScreen() {
           style={styles.reactLogo}
         />
       }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
       <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
-
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
+        <Button
+          disabled={!request}
+          title="GitHub Apps OAuth認証"
+          onPress={() => {
+            promptAsync();
+          }}
+        />
+        <View style={styles.container}>
+          <AppleAuthentication.AppleAuthenticationButton
+            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+            cornerRadius={5}
+            style={styles.button}
+            onPress={async () => {
+              try {
+                const credential = await AppleAuthentication.signInAsync({
+                  requestedScopes: [],
+                });
+                // 成功時の処理
+                console.log(credential);
+                // credential.identityToken をバックエンドに送る
+              } catch (error) {
+                console.log(error);
+              }
+            }}
+          />
+        </View>
       </ThemedView>
     </ParallaxScrollView>
   );
@@ -94,5 +143,14 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     position: 'absolute',
+  },
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  button: {
+    width: 200,
+    height: 44,
   },
 });
