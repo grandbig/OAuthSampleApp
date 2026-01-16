@@ -13,6 +13,7 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "@invertase/react-native-apple-authentication": "^2.5.1",
+    "@pagopa/io-react-native-jwt": "^2.2.0",
     "@react-native-google-signin/google-signin": "^16.1.1",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
