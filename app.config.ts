@@ -13,8 +13,10 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ios: {
     supportsTablet: true,
     bundleIdentifier: process.env.EXPO_PUBLIC_APP_IDENTIFIER!,
-    usesAppleSignIn: true,
     appleTeamId: process.env.EXPO_PUBLIC_APPLE_TEAM_ID!,
+    entitlements: {
+      "com.apple.developer.applesignin": ["Default"]
+    }
   },
   android: {
     adaptiveIcon: {
@@ -57,7 +59,6 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
         },
       },
     ],
-    'expo-apple-authentication',
     [
       '@react-native-google-signin/google-signin',
       {

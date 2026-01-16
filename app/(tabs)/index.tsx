@@ -1,11 +1,13 @@
 import { Image } from 'expo-image';
-import { Button, StyleSheet, View } from 'react-native';
+import { Button, Platform, StyleSheet, View } from 'react-native';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedView } from '@/components/themed-view';
-import * as AppleAuthentication from 'expo-apple-authentication';
+import { appleAuth, appleAuthAndroid, AppleButton } from '@invertase/react-native-apple-authentication';
 import { CodeChallengeMethod, makeRedirectUri, useAuthRequest } from "expo-auth-session";
 import { useEffect } from 'react';
+import 'react-native-get-random-values';
+import { v4 as uuid } from 'uuid';
 
 const discovery = {
   authorizationEndpoint: 'https://github.com/login/oauth/authorize',
@@ -85,6 +87,55 @@ export default function HomeScreen() {
     }
   }, [response, request]);
 
+  // iOS用のApple Sign In
+  const handleAppleSignInIOS = async () => {
+    try {
+      // 1. Apple認証リクエストを実行
+      const appleAuthRequestResponse = await appleAuth.performRequest({
+        requestedOperation: appleAuth.Operation.LOGIN,
+        requestedScopes: [appleAuth.Scope.FULL_NAME, appleAuth.Scope.EMAIL],
+      });
+
+      // 2. 認証状態を確認
+      const credentialState = await appleAuth.getCredentialStateForUser(
+        appleAuthRequestResponse.user
+      );
+
+      if (credentialState === appleAuth.State.AUTHORIZED) {
+        console.log('Apple Auth (iOS) Success:', appleAuthRequestResponse);
+        // appleAuthRequestResponse.identityToken をバックエンドに送信
+      }
+    } catch (error) {
+      console.error('Apple Sign In Error (iOS):', error);
+    }
+  };
+
+  // Android用のApple Sign In
+  const handleAppleSignInAndroid = async () => {
+    try {
+      // 1. セキュアなランダム値を生成
+      const rawNonce = uuid();
+      const state = uuid();
+
+      // 2. Apple認証を設定
+      appleAuthAndroid.configure({
+        clientId: process.env.EXPO_PUBLIC_APPLE_SERVICE_ID!,
+        redirectUri: process.env.EXPO_PUBLIC_APPLE_REDIRECT_URI!,
+        responseType: appleAuthAndroid.ResponseType.ALL,
+        scope: appleAuthAndroid.Scope.ALL,
+        nonce: rawNonce,
+        state,
+      });
+
+      // 3. サインインを実行
+      const response = await appleAuthAndroid.signIn();
+      console.log('Apple Auth (Android) Success:', response);
+      // response.id_token または response.code をバックエンドに送信
+    } catch (error) {
+      console.error('Apple Sign In Error (Android):', error);
+    }
+  };
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -103,24 +154,21 @@ export default function HomeScreen() {
           }}
         />
         <View style={styles.container}>
-          <AppleAuthentication.AppleAuthenticationButton
-            buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-            buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-            cornerRadius={5}
-            style={styles.button}
-            onPress={async () => {
-              try {
-                const credential = await AppleAuthentication.signInAsync({
-                  requestedScopes: [],
-                });
-                // 成功時の処理
-                console.log(credential);
-                // credential.identityToken をバックエンドに送る
-              } catch (error) {
-                console.log(error);
-              }
-            }}
-          />
+          {Platform.OS === 'ios' ? (
+            <AppleButton
+              buttonStyle={AppleButton.Style.BLACK}
+              buttonType={AppleButton.Type.SIGN_IN}
+              style={styles.button}
+              onPress={handleAppleSignInIOS}
+            />
+          ) : Platform.OS === 'android' && appleAuthAndroid.isSupported ? (
+            <AppleButton
+              buttonStyle={AppleButton.Style.BLACK}
+              buttonType={AppleButton.Type.SIGN_IN}
+              style={styles.button}
+              onPress={handleAppleSignInAndroid}
+            />
+          ) : null}
         </View>
       </ThemedView>
     </ParallaxScrollView>
